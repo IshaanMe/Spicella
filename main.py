@@ -40,14 +40,22 @@ def decrement(key):
 
 # Render spice selection UI
 for spice in SPICES:
-    st.markdown(f"**{spice}**")
+    st.markdown(f"<h4 style='font-size: 20px;'>{spice}</h4>", unsafe_allow_html=True)
     cols = st.columns(len(SIZES))
     for i, size in enumerate(SIZES):
         key = f"{spice}_{size}"
         with cols[i]:
-            st.button("➖", key=f"decr_{key}", on_click=decrement, args=(key,))
+            st.markdown(
+                f"<button style='font-size:12px;padding:2px 6px;margin:2px;' onclick=\"window.location.reload();\">➖</button>",
+                unsafe_allow_html=True,
+            )
             st.write(f"{size} (₹{PRICES[spice][size]}): {st.session_state.quantities[key]}")
-            st.button("➕", key=f"incr_{key}", on_click=increment, args=(key,))
+            st.markdown(
+                f"<button style='font-size:12px;padding:2px 6px;margin:2px;' onclick=\"window.location.reload();\">➕</button>",
+                unsafe_allow_html=True,
+            )
+            st.button("", key=f"decr_{key}", on_click=decrement, args=(key,), help="Decrease quantity")
+            st.button("", key=f"incr_{key}", on_click=increment, args=(key,), help="Increase quantity")
         order[key] = st.session_state.quantities[key]
         total_amount += st.session_state.quantities[key] * PRICES[spice][size]
 
