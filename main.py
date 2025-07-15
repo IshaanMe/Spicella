@@ -16,6 +16,7 @@ PRICES = {
 SPICES = list(PRICES.keys())
 SIZES = ["250g", "500g", "1kg"]
 
+st.set_page_config(page_title="Spice Order App", layout="wide")
 st.title("🌶️ Spice Order App")
 
 # Customer info
@@ -27,6 +28,8 @@ address = st.text_area("Address (Optional)")
 st.subheader("Select Your Spices")
 order = {}
 total_amount = 0
+
+total_quantity = 0  # for cart count
 
 # Helper functions for increment/decrement
 if "quantities" not in st.session_state:
@@ -40,24 +43,31 @@ def decrement(key):
 
 # Render spice selection UI
 for spice in SPICES:
-    st.markdown(f"<h4 style='font-size: 20px;'>{spice}</h4>", unsafe_allow_html=True)
+    st.markdown(f"<h4 style='font-size: 22px;'>{spice}</h4>", unsafe_allow_html=True)
     cols = st.columns(len(SIZES))
     for i, size in enumerate(SIZES):
         key = f"{spice}_{size}"
         with cols[i]:
-            st.markdown(
-                f"<button style='font-size:12px;padding:2px 6px;margin:2px;' onclick=\"window.location.reload();\">➖</button>",
-                unsafe_allow_html=True,
-            )
-            st.write(f"{size} (₹{PRICES[spice][size]}): {st.session_state.quantities[key]}")
-            st.markdown(
-                f"<button style='font-size:12px;padding:2px 6px;margin:2px;' onclick=\"window.location.reload();\">➕</button>",
-                unsafe_allow_html=True,
-            )
-            st.button("", key=f"decr_{key}", on_click=decrement, args=(key,), help="Decrease quantity")
-            st.button("", key=f"incr_{key}", on_click=increment, args=(key,), help="Increase quantity")
+            st.markdown(f"<div style='text-align:center;font-size:16px;font-weight:600'>{size}<br>(₹{PRICES[spice][size]})</div>", unsafe_allow_html=True)
+            col1, col2, col3 = st.columns([1, 1, 1])
+            with col1:
+                st.button("➖", key=f"decr_{key}", on_click=decrement, args=(key,), help="Decrease quantity")
+            with col2:
+                st.markdown(f"<div style='text-align:center;font-size:16px;margin-top:6px;'>{st.session_state.quantities[key]}</div>", unsafe_allow_html=True)
+            with col3:
+                st.button("➕", key=f"incr_{key}", on_click=increment, args=(key,), help="Increase quantity")
+
         order[key] = st.session_state.quantities[key]
         total_amount += st.session_state.quantities[key] * PRICES[spice][size]
+        total_quantity += st.session_state.quantities[key]
+
+# Cart icon and summary
+st.markdown("<hr>", unsafe_allow_html=True)
+cart_col1, cart_col2 = st.columns([1, 5])
+with cart_col1:
+    st.markdown(f"<h3>🛒</h3>", unsafe_allow_html=True)
+with cart_col2:
+    st.markdown(f"<h5>{total_quantity} items | Total: ₹{total_amount}</h5>", unsafe_allow_html=True)
 
 # Summary
 st.subheader("Order Summary")
