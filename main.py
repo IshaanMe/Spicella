@@ -80,8 +80,9 @@ for spice in SPICES:
     for i, size in enumerate(SIZES):
         key = f"{spice}_{size}"
         with cols[i]:
-            st.markdown(f"<div class='row-box'>
-                <div class='gm-label'>{size} (₹{PRICES[spice][size]})</div>", unsafe_allow_html=True)
+            st.markdown(
+                f"<div class='row-box'><div class='gm-label'>{size} (₹{PRICES[spice][size]})</div>",
+                unsafe_allow_html=True)
 
             col1, col2, col3 = st.columns([1, 1, 1])
             with col1:
@@ -95,7 +96,7 @@ for spice in SPICES:
                 with st.container():
                     st.markdown("<div class='btn-green'>", unsafe_allow_html=True)
                     st.button("➕", key=f"incr_{key}", on_click=increment, args=(key,), help="Increase quantity")
-                    st.markdown("</div>", unsafe_allow_html=True)
+                    st.markdown("</div></div>", unsafe_allow_html=True)
 
         order[key] = st.session_state.quantities[key]
         total_amount += st.session_state.quantities[key] * PRICES[spice][size]
