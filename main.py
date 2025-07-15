@@ -17,7 +17,7 @@ SPICES = list(PRICES.keys())
 SIZES = ["250g", "500g", "1kg"]
 
 st.set_page_config(page_title="Spice Order App", layout="wide")
-st.title("🌶️ Spice Order App")
+st.title("Sai Sai Spices Order App")
 
 # Customer info
 st.subheader("Customer Details")
@@ -48,7 +48,25 @@ for spice in SPICES:
     for i, size in enumerate(SIZES):
         key = f"{spice}_{size}"
         with cols[i]:
-            st.markdown(f"<div style='text-align:center;font-size:16px;font-weight:600'>{size}<br>(₹{PRICES[spice][size]})</div>", unsafe_allow_html=True)
+            st.markdown(f"<div style='text-align:center;font-size:16px;font-weight:600;margin-bottom:6px'>{size}<br>(₹{PRICES[spice][size]})</div>", unsafe_allow_html=True)
+            st.markdown("""
+                <style>
+                .qty-row {
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    gap: 4px;
+                }
+                .qty-btn {
+                    border-radius: 8px;
+                    background-color: #f0f2f6;
+                    padding: 4px 10px;
+                    border: none;
+                    font-size: 16px;
+                    font-weight: bold;
+                }
+                </style>
+            """, unsafe_allow_html=True)
             col1, col2, col3 = st.columns([1, 1, 1])
             with col1:
                 st.button("➖", key=f"decr_{key}", on_click=decrement, args=(key,), help="Decrease quantity")
