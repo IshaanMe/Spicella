@@ -6,7 +6,6 @@ import os
 from datetime import datetime
 
 # Spice prices
-total_price = 0
 PRICES = {
     "Turmeric": {"250g": 40, "500g": 75, "1kg": 140},
     "Chili": {"250g": 50, "500g": 90, "1kg": 170},
@@ -29,19 +28,28 @@ st.subheader("Select Your Spices")
 order = {}
 total_amount = 0
 
+# Helper functions for increment/decrement
+if "quantities" not in st.session_state:
+    st.session_state.quantities = {f"{spice}_{size}": 0 for spice in SPICES for size in SIZES}
+
+def increment(key):
+    st.session_state.quantities[key] += 1
+
+def decrement(key):
+    st.session_state.quantities[key] = max(0, st.session_state.quantities[key] - 1)
+
+# Render spice selection UI
 for spice in SPICES:
     st.markdown(f"**{spice}**")
     cols = st.columns(len(SIZES))
     for i, size in enumerate(SIZES):
         key = f"{spice}_{size}"
-        if key not in st.session_state:
-            st.session_state[key] = 0
         with cols[i]:
-            st.button("-", key=f"decr_{key}", on_click=lambda k=key: st.session_state.update({k: max(0, st.session_state[k]-1)}))
-            st.write(f"{size} (₹{PRICES[spice][size]}): {st.session_state[key]}")
-            st.button("+", key=f"incr_{key}", on_click=lambda k=key: st.session_state.update({k: st.session_state[k]+1}))
-        order[key] = st.session_state[key]
-        total_amount += st.session_state[key] * PRICES[spice][size]
+            st.button("➖", key=f"decr_{key}", on_click=decrement, args=(key,))
+            st.write(f"{size} (₹{PRICES[spice][size]}): {st.session_state.quantities[key]}")
+            st.button("➕", key=f"incr_{key}", on_click=increment, args=(key,))
+        order[key] = st.session_state.quantities[key]
+        total_amount += st.session_state.quantities[key] * PRICES[spice][size]
 
 # Summary
 st.subheader("Order Summary")
