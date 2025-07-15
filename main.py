@@ -28,9 +28,9 @@ address = st.text_area("Address (Optional)")
 st.subheader("Select Your Spices")
 order = {}
 total_amount = 0
-total_quantity = 0  # for cart count
+total_quantity = 0
 
-# Helper functions for increment/decrement
+# Helper functions
 if "quantities" not in st.session_state:
     st.session_state.quantities = {f"{spice}_{size}": 0 for spice in SPICES for size in SIZES}
 
@@ -40,51 +40,62 @@ def increment(key):
 def decrement(key):
     st.session_state.quantities[key] = max(0, st.session_state.quantities[key] - 1)
 
-# Render spice selection UI
+# Inline CSS styling
+st.markdown("""
+<style>
+    .row-box {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        margin-top: 4px;
+    }
+    .gm-label {
+        font-size: 18px;
+        font-weight: bold;
+        padding: 2px 6px;
+        min-width: 100px;
+    }
+    .btn-red > button {
+        background-color: #ffcccc !important;
+        color: #800000 !important;
+        font-size: 14px !important;
+        padding: 4px 8px !important;
+        border-radius: 8px !important;
+    }
+    .btn-green > button {
+        background-color: #ccffcc !important;
+        color: #006600 !important;
+        font-size: 14px !important;
+        padding: 4px 8px !important;
+        border-radius: 8px !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# Spice selection
 for spice in SPICES:
     st.markdown(f"<h4 style='font-size: 26px;'>{spice}</h4>", unsafe_allow_html=True)
     cols = st.columns(len(SIZES))
     for i, size in enumerate(SIZES):
         key = f"{spice}_{size}"
         with cols[i]:
-            st.markdown("""
-                <style>
-                    .inline-block { display: inline-block; vertical-align: middle; }
-                    .gm-label {
-                        font-size: 20px;
-                        font-weight: 700;
-                        margin-bottom: 2px;
-                    }
-                    .qty-btn button {
-                        font-size: 12px !important;
-                        padding: 2px 6px !important;
-                        border-radius: 6px;
-                        margin: 0 4px;
-                    }
-                    .qty-btn-red button {
-                        background-color: #ffcccc !important;
-                        color: #800000 !important;
-                    }
-                    .qty-btn-green button {
-                        background-color: #ccffcc !important;
-                        color: #006600 !important;
-                    }
-                </style>
-            """, unsafe_allow_html=True)
+            st.markdown(f"<div class='row-box'>
+                <div class='gm-label'>{size} (₹{PRICES[spice][size]})</div>", unsafe_allow_html=True)
 
-            st.markdown(
-                f"""
-                <div style='text-align:center;'>
-                    <span class='gm-label'>{size} (₹{PRICES[spice][size]})</span><br>
-                    <div class='qty-btn'>
-                        <span class='inline-block qty-btn-red'>{st.button("➖", key=f"decr_{key}", on_click=decrement, args=(key,), help="Decrease quantity")}</span>
-                        <span class='inline-block' style='font-size:16px;padding:0 6px;'>{st.session_state.quantities[key]}</span>
-                        <span class='inline-block qty-btn-green'>{st.button("➕", key=f"incr_{key}", on_click=increment, args=(key,), help="Increase quantity")}</span>
-                    </div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
+            col1, col2, col3 = st.columns([1, 1, 1])
+            with col1:
+                with st.container():
+                    st.markdown("<div class='btn-red'>", unsafe_allow_html=True)
+                    st.button("➖", key=f"decr_{key}", on_click=decrement, args=(key,), help="Decrease quantity")
+                    st.markdown("</div>", unsafe_allow_html=True)
+            with col2:
+                st.markdown(f"<div style='text-align:center;font-size:16px;padding-top:8px;'>{st.session_state.quantities[key]}</div>", unsafe_allow_html=True)
+            with col3:
+                with st.container():
+                    st.markdown("<div class='btn-green'>", unsafe_allow_html=True)
+                    st.button("➕", key=f"incr_{key}", on_click=increment, args=(key,), help="Increase quantity")
+                    st.markdown("</div>", unsafe_allow_html=True)
 
         order[key] = st.session_state.quantities[key]
         total_amount += st.session_state.quantities[key] * PRICES[spice][size]
