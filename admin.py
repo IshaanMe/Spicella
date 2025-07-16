@@ -1,6 +1,5 @@
 ### admin.py — Admin Dashboard with PDF Invoice (Google Sheets Based)
-import os
-import json
+
 import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
@@ -8,6 +7,8 @@ from datetime import datetime, date
 from fpdf import FPDF
 from io import BytesIO
 from collections import defaultdict
+import json
+import os
 
 st.set_page_config(page_title="Admin Dashboard", layout="wide")
 
@@ -57,11 +58,16 @@ if st.checkbox("🔄 Reset status cache file"):
     with open(STATUS_FILE, "w") as f:
         json.dump({}, f)
 
+status_data = {}
 if os.path.exists(STATUS_FILE):
-    with open(STATUS_FILE, "r") as f:
-        status_data = json.load(f)
-else:
-    status_data = {}
+    try:
+        with open(STATUS_FILE, "r") as f:
+            content = f.read().strip()
+            if content:
+                status_data = json.loads(content)
+    except json.JSONDecodeError:
+        st.warning("⚠️ Status file is corrupted. Resetting to empty.")
+        status_data = {}
 
 # Compute summaries
 all_orders = list(orders_dict.items())
@@ -167,7 +173,10 @@ else:
                     mime="application/pdf"
                 )
 
-with open(STATUS_FILE, "w") as f:
-    json.dump(status_data, f, indent=4)
+try:
+    with open(STATUS_FILE, "w") as f:
+        json.dump(status_data, f, indent=4)
+except Exception as e:
+    st.error(f"❌ Failed to save status file: {e}")
 
 st.success(f"{len(filtered_orders)} order(s) displayed.")
