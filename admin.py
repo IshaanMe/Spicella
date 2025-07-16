@@ -1,71 +1,68 @@
-### admin.py — Admin Dashboard with PDF Invoice
-
 import streamlit as st
-import json
-import os
-from datetime import datetime, date
+import gspread
+from google.oauth2.service_account import Credentials
 from fpdf import FPDF
 from io import BytesIO
+from datetime import datetime, date
+import json
 
 st.set_page_config(page_title="Admin Dashboard", layout="wide")
-
 st.title("🔐 Admin Login")
+
+# Auth check
 password = st.text_input("Enter Admin Password", type="password")
 if password != "admin123":
     st.warning("Enter valid admin password to view orders.")
     st.stop()
 
-st.title("📊 Spice Order Dashboard")
+# Google Sheets auth
+creds = Credentials.from_service_account_file("creds.json", scopes=["https://www.googleapis.com/auth/spreadsheets"])
+client = gspread.authorize(creds)
+sheet = client.open("Spice Orders").worksheet("Orders")
+data = sheet.get_all_records()
 
-ORDER_FOLDER = "orders"
+# Status file (local JSON)
 STATUS_FILE = "order_status.json"
+if not data:
+    st.info("No orders yet.")
+    st.stop()
 
-PRICES = {
-    "Turmeric": {"250g": 40, "500g": 75, "1kg": 140},
-    "Chili": {"250g": 50, "500g": 90, "1kg": 170},
-    "Coriander": {"250g": 35, "500g": 65, "1kg": 120},
-    "Cumin": {"250g": 60, "500g": 110, "1kg": 200},
-}
-
-if not os.path.exists(ORDER_FOLDER):
-    os.makedirs(ORDER_FOLDER)
-
-order_files = sorted(os.listdir(ORDER_FOLDER), reverse=True)
-orders = []
-for filename in order_files:
-    if filename.endswith(".json"):
-        with open(os.path.join(ORDER_FOLDER, filename), "r") as f:
-            try:
-                data = json.load(f)
-                data["filename"] = filename
-                if "timestamp" not in data:
-                    data["timestamp"] = "Unknown"
-                if "total_amount" not in data:
-                    data["total_amount"] = 0
-                orders.append(data)
-            except json.JSONDecodeError:
-                st.warning(f"⚠️ Skipped unreadable file: {filename}")
-
+# Read/update status tracking
 if os.path.exists(STATUS_FILE):
     with open(STATUS_FILE, "r") as f:
         status_data = json.load(f)
 else:
     status_data = {}
 
-for order in orders:
-    order_id = order["filename"]
-    order["status"] = status_data.get(order_id, "Pending")
+# Process orders
+orders = []
+for row in data:
+    order_id = row.get("OrderID")
+    try:
+        order = {
+            "filename": order_id,
+            "name": row.get("Name", "-"),
+            "phone": row.get("Phone", "-"),
+            "address": row.get("Address", "-"),
+            "timestamp": row.get("Timestamp", ""),
+            "total_amount": int(row.get("Total", 0)),
+            "order": json.loads(row.get("OrderData", "{}")),
+            "status": status_data.get(order_id, "Pending")
+        }
+        orders.append(order)
+    except Exception as e:
+        st.warning(f"❌ Skipped order {order_id}: {e}")
 
-# Dashboard Summary
-st.subheader("📈 Dashboard Summary")
+# Summary metrics
+st.title("📊 Spice Order Dashboard")
 total_orders = len(orders)
-total_revenue = sum(o.get("total_amount", 0) for o in orders)
-unique_customers = len(set(o.get("phone", "") for o in orders))
-pending_orders = sum(1 for o in orders if o.get("status") == "Pending")
+total_revenue = sum(o["total_amount"] for o in orders)
+unique_customers = len(set(o["phone"] for o in orders))
+pending_orders = sum(1 for o in orders if o["status"] == "Pending")
 delivered_orders = total_orders - pending_orders
-today = date.today()
-todays_orders = [o for o in orders if o.get("timestamp", "").startswith(today.isoformat())]
-todays_revenue = sum(o.get("total_amount", 0) for o in todays_orders)
+today = date.today().isoformat()
+todays_orders = [o for o in orders if o["timestamp"].startswith(today)]
+todays_revenue = sum(o["total_amount"] for o in todays_orders)
 
 cols = st.columns(3)
 cols[0].metric("🛍️ Total Orders", total_orders)
@@ -73,92 +70,87 @@ cols[1].metric("👥 Total Customers", unique_customers)
 cols[2].metric("💰 Total Revenue", f"₹{total_revenue}")
 
 cols = st.columns(3)
-cols[0].metric("📦 Pending Orders", pending_orders)
-cols[1].metric("✅ Delivered Orders", delivered_orders)
+cols[0].metric("📦 Pending", pending_orders)
+cols[1].metric("✅ Delivered", delivered_orders)
 cols[2].metric("📅 Today's Revenue", f"₹{todays_revenue}")
 
-st.markdown("---")
-
+# Filter section
 st.sidebar.header("🔎 Filter Orders")
-status_filter = st.sidebar.selectbox("Filter by Status", ["All", "Pending", "Delivered"])
-search_name = st.sidebar.text_input("Search by Customer Name").lower()
-search_phone = st.sidebar.text_input("Search by Phone")
+status_filter = st.sidebar.selectbox("Status", ["All", "Pending", "Delivered"])
+search_name = st.sidebar.text_input("Search Name").lower()
+search_phone = st.sidebar.text_input("Search Phone")
 
 filtered_orders = []
-for order in orders:
-    if status_filter != "All" and order["status"] != status_filter:
+for o in orders:
+    if status_filter != "All" and o["status"] != status_filter:
         continue
-    if search_name and search_name not in order.get("name", "").lower():
+    if search_name and search_name not in o["name"].lower():
         continue
-    if search_phone and search_phone not in order.get("phone", ""):
+    if search_phone and search_phone not in o["phone"]:
         continue
-    filtered_orders.append(order)
+    filtered_orders.append(o)
 
 if not filtered_orders:
-    st.info("No orders match current filters.")
+    st.info("No orders match filters.")
 else:
     st.subheader(f"📦 Orders ({len(filtered_orders)})")
     for order in filtered_orders:
-        order_id = order["filename"]
-        timestamp = order.get("timestamp", "Unknown")
-        with st.expander(f"🧾 {order.get('name', 'Unknown')} | ₹{order.get('total_amount', 0)} | {timestamp[:16]}"):
-            st.markdown(f"**📞 Phone:** {order.get('phone', '-')}")
-            st.markdown(f"**📍 Address:** {order.get('address', '-')}")
-            st.markdown(f"**🕒 Time:** {timestamp}")
-
-            st.markdown("### 🛒 Order Items:")
-            for item, qty in order.get("order", {}).items():
+        with st.expander(f"🧾 {order['name']} | ₹{order['total_amount']} | {order['timestamp']}"):
+            st.markdown(f"**📞 Phone:** {order['phone']}")
+            st.markdown(f"**📍 Address:** {order['address']}")
+            st.markdown(f"**🕒 Time:** {order['timestamp']}")
+            st.markdown("### 🛒 Order Items")
+            for item, qty in order["order"].items():
                 spice, size = item.split("_")
                 st.markdown(f"- {spice} ({size}): {qty}")
 
-            new_status = st.radio("Update Status:", ["Pending", "Delivered"],
-                                   index=0 if order["status"] == "Pending" else 1, key=order_id)
-            status_data[order_id] = new_status
+            new_status = st.radio("Update Status", ["Pending", "Delivered"],
+                                  index=0 if order["status"] == "Pending" else 1,
+                                  key=order["filename"])
+            status_data[order["filename"]] = new_status
 
-            if st.button("📄 Download Invoice (PDF)", key=f"invoice_{order_id}"):
+            if st.button("📄 Download Invoice", key="inv_" + order["filename"]):
                 pdf = FPDF()
                 pdf.add_page()
-                pdf.set_font("Arial", size=12)
-
                 pdf.set_font("Arial", 'B', 16)
                 pdf.cell(200, 10, "Spice Order Invoice", ln=True, align="C")
                 pdf.ln(10)
 
                 pdf.set_font("Arial", size=12)
-                pdf.cell(100, 10, f"Name: {order.get('name', '-')}", ln=True)
-                pdf.cell(100, 10, f"Phone: {order.get('phone', '-')}", ln=True)
-                pdf.cell(100, 10, f"Address: {order.get('address', '-')}", ln=True)
-                pdf.cell(100, 10, f"Date: {timestamp[:16]}", ln=True)
-                pdf.ln(10)
+                pdf.cell(100, 10, f"Name: {order['name']}", ln=True)
+                pdf.cell(100, 10, f"Phone: {order['phone']}", ln=True)
+                pdf.cell(100, 10, f"Address: {order['address']}", ln=True)
+                pdf.cell(100, 10, f"Date: {order['timestamp']}", ln=True)
+                pdf.ln(5)
 
                 pdf.set_font("Arial", 'B', 12)
                 pdf.cell(80, 10, "Spice", border=1)
-                pdf.cell(40, 10, "Quantity", border=1)
+                pdf.cell(40, 10, "Qty", border=1)
                 pdf.cell(40, 10, "Price", border=1, ln=True)
 
                 pdf.set_font("Arial", size=12)
-                for item, qty in order.get("order", {}).items():
+                PRICES = {
+                    "Turmeric": {"250g": 40, "500g": 75, "1kg": 140},
+                    "Chili": {"250g": 50, "500g": 90, "1kg": 170},
+                    "Coriander": {"250g": 35, "500g": 65, "1kg": 120},
+                    "Cumin": {"250g": 60, "500g": 110, "1kg": 200},
+                }
+
+                for item, qty in order["order"].items():
                     spice, size = item.split("_")
-                    price = PRICES.get(spice, {}).get(size, 0)
-                    line = f"{spice} ({size})"
-                    pdf.cell(80, 10, line, border=1)
+                    price = PRICES[spice][size]
+                    pdf.cell(80, 10, f"{spice} ({size})", border=1)
                     pdf.cell(40, 10, str(qty), border=1)
                     pdf.cell(40, 10, f"₹{qty * price}", border=1, ln=True)
 
-                pdf.set_font("Arial", 'B', 12)
                 pdf.cell(120, 10, "Total", border=1)
-                pdf.cell(40, 10, f"₹{order.get('total_amount', 0)}", border=1, ln=True)
+                pdf.cell(40, 10, f"₹{order['total_amount']}", border=1, ln=True)
 
                 pdf_output = BytesIO()
                 pdf.output(pdf_output)
-                st.download_button(
-                    label="⬇️ Download Invoice",
-                    data=pdf_output.getvalue(),
-                    file_name=f"invoice_{order.get('phone', 'order')}_{timestamp[:10]}.pdf",
-                    mime="application/pdf"
-                )
+                st.download_button("⬇️ Download PDF", data=pdf_output.getvalue(),
+                                   file_name=f"invoice_{order['phone']}.pdf", mime="application/pdf")
 
+# Save updated statuses
 with open(STATUS_FILE, "w") as f:
     json.dump(status_data, f, indent=4)
-
-st.success(f"{len(filtered_orders)} order(s) displayed.")
