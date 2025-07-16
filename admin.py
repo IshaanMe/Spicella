@@ -1,15 +1,16 @@
-### admin.py — Admin Dashboard (Google Sheets)
+### admin.py — Admin Dashboard from Google Sheets
 
 import streamlit as st
-import pandas as pd
-from datetime import datetime, date
-from fpdf import FPDF
-from io import BytesIO
 import gspread
 from google.oauth2.service_account import Credentials
+from fpdf import FPDF
+from io import BytesIO
+from datetime import datetime, date
 
+# Set page configuration
 st.set_page_config(page_title="Admin Dashboard", layout="wide")
 
+# Admin Login
 st.title("🔐 Admin Login")
 password = st.text_input("Enter Admin Password", type="password")
 if password != "admin123":
@@ -18,13 +19,13 @@ if password != "admin123":
 
 st.title("📊 Spice Order Dashboard")
 
-# --- Google Sheets Setup ---
-SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
-creds = Credentials.from_service_account_file("creds.json", scopes=SCOPES)
+# Google Sheets setup
+SCOPE = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+creds = Credentials.from_service_account_file("creds.json", scopes=SCOPE)
 client = gspread.authorize(creds)
 sheet = client.open("Spice Orders").worksheet("Orders")
 
-# --- Prices ---
+# Pricing structure (for invoice total validation)
 PRICES = {
     "Turmeric": {"250g": 40, "500g": 75, "1kg": 140},
     "Chili": {"250g": 50, "500g": 90, "1kg": 170},
@@ -32,103 +33,101 @@ PRICES = {
     "Cumin": {"250g": 60, "500g": 110, "1kg": 200},
 }
 
-# --- Load Orders ---
-data = sheet.get_all_records()
-if not data:
-    st.info("No orders found in Google Sheet.")
-    st.stop()
+# Load data from sheet
+records = sheet.get_all_records()
 
-orders_df = pd.DataFrame(data)
-orders_df["Timestamp"] = pd.to_datetime(orders_df["Timestamp"], errors='coerce')
-
-# --- Summary ---
+# Dashboard summary
 st.subheader("📈 Dashboard Summary")
-total_orders = len(orders_df)
-total_revenue = orders_df["Total"].sum()
-unique_customers = orders_df["Phone"].nunique()
-today = pd.to_datetime(date.today())
-todays_orders = orders_df[orders_df["Timestamp"].dt.date == today.date()]
-todays_revenue = todays_orders["Total"].sum()
+total_orders = len(records)
+total_revenue = sum(row.get("Total Amount", 0) for row in records)
+unique_customers = len(set(row.get("Phone") for row in records))
+today_str = date.today().strftime("%Y-%m-%d")
+today_orders = [row for row in records if str(row.get("Timestamp", "")).startswith(today_str)]
+todays_revenue = sum(row.get("Total Amount", 0) for row in today_orders)
 
 cols = st.columns(3)
 cols[0].metric("🛍️ Total Orders", total_orders)
-cols[1].metric("👥 Total Customers", unique_customers)
+cols[1].metric("👥 Unique Customers", unique_customers)
 cols[2].metric("💰 Total Revenue", f"₹{total_revenue}")
 
 cols = st.columns(2)
-cols[0].metric("📅 Today's Orders", len(todays_orders))
+cols[0].metric("📅 Today's Orders", len(today_orders))
 cols[1].metric("📅 Today's Revenue", f"₹{todays_revenue}")
 
 st.markdown("---")
 
-# --- Filter ---
+# Filter sidebar
 st.sidebar.header("🔎 Filter Orders")
-name_filter = st.sidebar.text_input("Search by Name").lower()
-phone_filter = st.sidebar.text_input("Search by Phone")
+search_name = st.sidebar.text_input("Search by Name").lower()
+search_phone = st.sidebar.text_input("Search by Phone")
 
-filtered = orders_df.copy()
-if name_filter:
-    filtered = filtered[filtered["Name"].str.lower().str.contains(name_filter)]
-if phone_filter:
-    filtered = filtered[filtered["Phone"].astype(str).str.contains(phone_filter)]
+filtered = []
+for r in records:
+    name = str(r.get("Name", "")).lower()
+    phone = str(r.get("Phone", ""))
+    if search_name and search_name not in name:
+        continue
+    if search_phone and search_phone not in phone:
+        continue
+    filtered.append(r)
 
-if filtered.empty:
-    st.info("No matching orders.")
-    st.stop()
+if not filtered:
+    st.info("No matching orders found.")
+else:
+    st.subheader(f"📦 Orders ({len(filtered)})")
+    for i, row in enumerate(filtered):
+        timestamp = row.get("Timestamp", "")
+        name = row.get("Name", "")
+        phone = row.get("Phone", "")
+        address = row.get("Address", "")
+        spice = row.get("Spice", "")
+        size = row.get("Size", "")
+        qty = row.get("Qty", 0)
+        price = row.get("Price", 0)
+        total = row.get("Total Amount", 0)
 
-st.subheader(f"📦 Orders ({len(filtered)})")
+        with st.expander(f"🧾 {name} | {spice} ({size}) × {qty} | ₹{total} | {timestamp}"):
+            st.markdown(f"**📞 Phone:** {phone}")
+            st.markdown(f"**📍 Address:** {address if address else '-'}")
+            st.markdown(f"**🕒 Time:** {timestamp}")
 
-for idx, row in filtered.iterrows():
-    with st.expander(f"🧾 {row['Name']} | ₹{row['Total']} | {row['Timestamp'].strftime('%Y-%m-%d %H:%M')}"):
-        st.markdown(f"**📞 Phone:** {row['Phone']}")
-        st.markdown(f"**📍 Address:** {row['Address']}")
+            st.markdown("### 🛒 Order Detail:")
+            st.markdown(f"- {spice} ({size}): {qty} × ₹{price} = ₹{qty * price}")
 
-        st.markdown("### 🛒 Items:")
-        items = eval(row["Order"]) if isinstance(row["Order"], str) else row["Order"]
-        for item, qty in items.items():
-            spice, size = item.split("_")
-            st.markdown(f"- {spice} ({size}): {qty}")
+            if st.button("📄 Download Invoice (PDF)", key=f"pdf_{i}"):
+                pdf = FPDF()
+                pdf.add_page()
+                pdf.set_font("Arial", 'B', 16)
+                pdf.cell(200, 10, "Spice Order Invoice", ln=True, align="C")
+                pdf.ln(10)
 
-        if st.button("📄 Download Invoice", key=f"invoice_{idx}"):
-            pdf = FPDF()
-            pdf.add_page()
-            pdf.set_font("Arial", size=12)
-            pdf.set_font("Arial", 'B', 16)
-            pdf.cell(200, 10, "Spice Order Invoice", ln=True, align="C")
-            pdf.ln(10)
+                pdf.set_font("Arial", size=12)
+                pdf.cell(100, 10, f"Name: {name}", ln=True)
+                pdf.cell(100, 10, f"Phone: {phone}", ln=True)
+                pdf.cell(100, 10, f"Address: {address}", ln=True)
+                pdf.cell(100, 10, f"Date: {timestamp}", ln=True)
+                pdf.ln(5)
 
-            pdf.set_font("Arial", size=12)
-            pdf.cell(100, 10, f"Name: {row['Name']}", ln=True)
-            pdf.cell(100, 10, f"Phone: {row['Phone']}", ln=True)
-            pdf.cell(100, 10, f"Address: {row['Address']}", ln=True)
-            pdf.cell(100, 10, f"Date: {row['Timestamp'].strftime('%Y-%m-%d %H:%M')}", ln=True)
-            pdf.ln(10)
+                pdf.set_font("Arial", 'B', 12)
+                pdf.cell(80, 10, "Spice", border=1)
+                pdf.cell(40, 10, "Quantity", border=1)
+                pdf.cell(40, 10, "Price", border=1, ln=True)
 
-            pdf.set_font("Arial", 'B', 12)
-            pdf.cell(80, 10, "Spice", border=1)
-            pdf.cell(40, 10, "Quantity", border=1)
-            pdf.cell(40, 10, "Price", border=1, ln=True)
-
-            pdf.set_font("Arial", size=12)
-            for item, qty in items.items():
-                spice, size = item.split("_")
-                price = PRICES.get(spice, {}).get(size, 0)
-                pdf.cell(80, 10, f"{spice} ({size})", border=1)
+                pdf.set_font("Arial", size=12)
+                line = f"{spice} ({size})"
+                pdf.cell(80, 10, line, border=1)
                 pdf.cell(40, 10, str(qty), border=1)
                 pdf.cell(40, 10, f"₹{qty * price}", border=1, ln=True)
 
-            pdf.set_font("Arial", 'B', 12)
-            pdf.cell(120, 10, "Total", border=1)
-            pdf.cell(40, 10, f"₹{row['Total']}", border=1, ln=True)
+                pdf.set_font("Arial", 'B', 12)
+                pdf.cell(120, 10, "Total", border=1)
+                pdf.cell(40, 10, f"₹{total}", border=1, ln=True)
 
-            pdf_output = BytesIO()
-            pdf.output(pdf_output)
-
-            st.download_button(
-                label="⬇️ Download Invoice",
-                data=pdf_output.getvalue(),
-                file_name=f"invoice_{row['Phone']}_{row['Timestamp'].date()}.pdf",
-                mime="application/pdf"
-            )
-
-st.success(f"Displayed {len(filtered)} orders.")
+                pdf_output = BytesIO()
+                pdf.output(pdf_output)
+                st.download_button(
+                    label="⬇️ Download Invoice",
+                    data=pdf_output.getvalue(),
+                    file_name=f"invoice_{name}_{timestamp[:10]}.pdf",
+                    mime="application/pdf"
+                )
