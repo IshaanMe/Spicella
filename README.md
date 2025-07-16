@@ -11,7 +11,7 @@ This Streamlit-based app allows customers to place spice orders and enables the 
 ### Customer App (`main.py`)
 - Customer must enter name and phone
 - Optional address field
-- Select spice quantities with `+/-` buttons like Zepto
+- Select spice quantities with `+/-` buttons
 - Auto-calculates price
 - Saves order as a `.json` file
 
