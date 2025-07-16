@@ -31,6 +31,7 @@ if not os.path.exists(ORDER_FOLDER):
     os.makedirs(ORDER_FOLDER)
 
 order_files = sorted(os.listdir(ORDER_FOLDER), reverse=True)
+st.write("📂 Found order files:", order_files)  # Debug print
 orders = []
 for filename in order_files:
     if filename.endswith(".json"):
@@ -57,7 +58,7 @@ unique_customers = len(set(o["phone"] for o in orders))
 pending_orders = sum(1 for o in orders if o["status"] == "Pending")
 delivered_orders = total_orders - pending_orders
 today = date.today()
-todays_orders = [o for o in orders if o["timestamp"][:10] == today.isoformat()]
+todays_orders = [o for o in orders if datetime.fromisoformat(o["timestamp"]).date() == today]
 todays_revenue = sum(o["total_amount"] for o in todays_orders)
 
 cols = st.columns(3)
