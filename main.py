@@ -51,7 +51,7 @@ st.markdown("""
         margin-top: 4px;
     }
     .gm-label {
-        font-size: 18px;
+        font-size: 20px;
         font-weight: bold;
         padding: 2px 6px;
         min-width: 100px;
@@ -125,6 +125,8 @@ else:
 if st.button("Submit Order"):
     if not name or not phone:
         st.error("Name and phone number are required.")
+    elif total_quantity == 0:
+        st.error("Please select at least one item before submitting the order.")
     else:
         order_data = {
             "name": name,
@@ -138,4 +140,5 @@ if st.button("Submit Order"):
         filename = f"orders/{phone}_{datetime.now().strftime('%Y%m%d%H%M%S')}.json"
         with open(filename, "w") as f:
             json.dump(order_data, f, indent=4)
-        st.success("Order submitted successfully!")
+        st.success("✅ Order submitted successfully!")
+        st.write(f"Saved to: `{filename}`")  # Debug info
